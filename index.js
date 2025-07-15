@@ -5,7 +5,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Cambia esta contraseña por una segura
-const ADMIN_PASSWORD = 'admin123';
+const ADMIN_PASSWORD = '123';
 
 // Middleware para obtener la IP real del visitante
 function getClientIp(req) {
