@@ -2,52 +2,79 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const app = express();
+
 const PORT = process.env.PORT || 3000;
+const ADMIN_PASSWORD = 'tu_password_seguro'; 
+const LOG_FILE = path.join(__dirname, 'registro_ips.txt');
 
-// Cambia esta contraseña por una segura
-const ADMIN_PASSWORD = '123';
+// --- FUNCIONES DE UTILIDAD ---
 
-// Middleware para obtener la IP real del visitante
 function getClientIp(req) {
-  return (
-    req.headers['x-forwarded-for']?.split(',')[0] ||
-    req.connection.remoteAddress ||
-    req.socket.remoteAddress ||
-    req.ip
-  );
+  const forwarded = req.headers['x-forwarded-for'];
+  return forwarded ? forwarded.split(',')[0] : req.socket.remoteAddress;
 }
 
-// Endpoint para guardar la IP
-app.get('/save-ip', (req, res) => {
-  const ip = getClientIp(req);
-  const fecha = new Date().toISOString();
-  const linea = `${fecha} - ${ip}\n`;
-  fs.appendFile(path.join(__dirname, 'ips.txt'), linea, err => {
-    if (err) {
-      return res.status(500).json({ ok: false, error: 'No se pudo guardar la IP' });
+function getPeruTime() {
+  return new Intl.DateTimeFormat('es-PE', {
+    timeZone: 'America/Lima',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false
+  }).format(new Date());
+}
+
+/**
+ * Función de Limpieza Automática:
+ * Verifica si el archivo existe y si su fecha de creación es mayor a 30 días.
+ */
+function limpiarLogsAntiguos() {
+  if (fs.existsSync(LOG_FILE)) {
+    const stats = fs.statSync(LOG_FILE);
+    const fechaArchivo = new Date(stats.birthtime); // Fecha de creación
+    const ahora = new Date();
+    
+    // Diferencia en milisegundos convertida a días
+    const diferenciaDias = (ahora - fechaArchivo) / (1000 * 60 * 60 * 24);
+
+    if (diferenciaDias >= 30) {
+      fs.unlinkSync(LOG_FILE); // Elimina el archivo
+      console.log(`[LIMPIEZA] Archivo de logs eliminado por antigüedad (30 días).`);
     }
-    res.json({ ok: true, ip });
+  }
+}
+
+// --- ENDPOINTS ---
+
+app.get('/save-ip', (req, res) => {
+  // 1. Ejecutar limpieza antes de escribir
+  limpiarLogsAntiguos();
+
+  const ip = getClientIp(req);
+  const fecha = getPeruTime();
+  const userAgent = req.headers['user-agent'] || 'Desconocido';
+  
+  // Información avanzada: Referer (de dónde viene el usuario)
+  const procedencia = req.headers['referer'] || 'Acceso Directo';
+
+  const registro = `[${fecha}] | IP: ${ip} | NAVEGADOR: ${userAgent} | REF: ${procedencia}\n`;
+
+  fs.appendFile(LOG_FILE, registro, (err) => {
+    if (err) return res.status(500).send('Error de escritura');
+    res.json({ status: "logged", ip });
   });
 });
 
-// Endpoint protegido para descargar el archivo de IPs
 app.get('/admin/download-ips', (req, res) => {
   const pass = req.query.pass;
-  if (pass !== ADMIN_PASSWORD) {
-    return res.status(401).send('No autorizado');
-  }
-  const filePath = path.join(__dirname, 'ips.txt');
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).send('No hay IPs registradas aún.');
-  }
-  res.download(filePath, 'ips.txt');
-});
+  if (pass !== ADMIN_PASSWORD) return res.status(401).send('No autorizado');
 
-// Página de prueba
-app.get('/', (req, res) => {
-  res.send('<h2>Servidor de IPs activo. Usa /save-ip para guardar la IP y /admin/download-ips?pass=TU_CONTRASEÑA para descargar.');
+  if (!fs.existsSync(LOG_FILE)) {
+    return res.status(404).send('El archivo no existe o fue rotado hace poco.');
+  }
+
+  res.download(LOG_FILE, `logs_peru_${new Date().toISOString().slice(0,10)}.txt`);
 });
 
 app.listen(PORT, () => {
-  console.log(`Servidor escuchando en puerto ${PORT}`);
-}); 
+  console.log(`Servidor de auditoría activo en puerto ${PORT}`);
+});
