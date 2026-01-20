@@ -80,7 +80,7 @@ app.use(async (req, res, next) => {
 });
 
 // Endpoint protegido para descargar el archivo
-app.get('/admin/download', (req, res) => {
+app.get('/admin/download-ips', (req, res) => {
   const pass = req.query.pass;
 
   if (pass !== ADMIN_PASSWORD) {
