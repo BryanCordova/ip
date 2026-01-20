@@ -1,20 +1,15 @@
 {
   "name": "backend-ip-server",
   "version": "1.0.0",
-  "description": "Servidor para registrar información de visitantes (IP, User-Agent, etc.) con hora de Perú y limpieza automática cada 30 días",
+  "description": "Servidor para registrar información de visitantes con hora de Perú y limpieza automática",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js"
   },
-  "keywords": [
-    "express",
-    "ip-logger",
-    "node",
-    "peru"
-  ],
-  "author": "Bryan",
-  "license": "ISC",
+  "engines": {
+    "node": "18.x || 20.x"
+  },
   "dependencies": {
     "express": "^4.19.2",
     "moment-timezone": "^0.5.46"
