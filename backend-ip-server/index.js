@@ -1,66 +1,125 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const moment = require('moment-timezone'); // ← Necesario para hora de Perú
+
 const app = express();
-
-// Render usa la variable de entorno PORT, si no existe usa el 3000
 const PORT = process.env.PORT || 3000;
-const ADMIN_PASSWORD = 'tu_password_seguro'; 
-const LOG_FILE = path.join(__dirname, 'registro_ips.txt');
 
-// Función para obtener la hora de Perú
-function getPeruTime() {
-  return new Intl.DateTimeFormat('es-PE', {
-    timeZone: 'America/Lima',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', second: '2-digit',
-    hour12: false
-  }).format(new Date());
+// ¡CAMBIAR ESTA CONTRASEÑA POR UNA MUY SEGURA!
+const ADMIN_PASSWORD = 'cambia_esta_contrasena_por_una_muy_segura_2025';
+
+// Ruta del archivo donde se guardan los datos
+const DATA_FILE = path.join(__dirname, 'ips.txt');
+
+// Función para obtener la IP real del visitante
+function getClientIp(req) {
+  return (
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.headers['x-real-ip'] ||
+    req.connection.remoteAddress ||
+    req.socket.remoteAddress ||
+    req.ip ||
+    'unknown'
+  );
 }
 
-function limpiarLogsAntiguos() {
-  if (fs.existsSync(LOG_FILE)) {
-    try {
-      const stats = fs.statSync(LOG_FILE);
-      const fechaArchivo = new Date(stats.birthtime);
-      const ahora = new Date();
-      const diferenciaDias = (ahora - fechaArchivo) / (1000 * 60 * 60 * 24);
+// Middleware para registrar automáticamente cada visita
+app.use((req, res, next) => {
+  // Solo registramos GET (puedes quitar esta condición si quieres registrar todo)
+  if (req.method === 'GET') {
+    const ip = getClientIp(req);
+    const userAgent = req.headers['user-agent'] || 'unknown';
+    const referer = req.headers.referer || '-';
+    const fechaPeru = moment().tz('America/Lima').format('YYYY-MM-DD HH:mm:ss');
 
-      if (diferenciaDias >= 30) {
-        fs.unlinkSync(LOG_FILE);
-        console.log("Logs antiguos eliminados.");
-      }
-    } catch (e) {
-      console.error("Error limpiando logs:", e);
+    const linea = `[${fechaPeru}] - IP: ${ip} | User-Agent: ${userAgent} | Referer: ${referer} | Ruta: ${req.originalUrl}\n`;
+
+    fs.appendFile(DATA_FILE, linea, (err) => {
+      if (err) console.error('Error al guardar datos:', err);
+    });
+  }
+  next();
+});
+
+// Endpoint para forzar el guardado (opcional, ya que se guarda automáticamente)
+app.get('/save-info', (req, res) => {
+  const ip = getClientIp(req);
+  res.json({ ok: true, message: 'Información registrada', ip });
+});
+
+// Endpoint protegido para descargar el archivo
+app.get('/admin/download', (req, res) => {
+  const pass = req.query.pass;
+
+  if (pass !== ADMIN_PASSWORD) {
+    return res.status(401).send('Acceso no autorizado');
+  }
+
+  // Verificamos si el archivo existe
+  if (!fs.existsSync(DATA_FILE)) {
+    return res.status(404).send('Aún no hay registros.');
+  }
+
+  res.download(DATA_FILE, `visitas_${moment().tz('America/Lima').format('YYYY-MM-DD')}.txt`);
+});
+
+// Endpoint para ver cuántos días faltan para la limpieza automática
+app.get('/admin/status', (req, res) => {
+  const pass = req.query.pass;
+  if (pass !== ADMIN_PASSWORD) {
+    return res.status(401).send('No autorizado');
+  }
+
+  if (!fs.existsSync(DATA_FILE)) {
+    return res.json({ message: 'No existe archivo aún' });
+  }
+
+  const stats = fs.statSync(DATA_FILE);
+  const creationDate = moment(stats.birthtime).tz('America/Lima');
+  const daysSinceCreation = moment().tz('America/Lima').diff(creationDate, 'days');
+
+  const daysLeft = 30 - daysSinceCreation;
+
+  res.json({
+    archivoCreado: creationDate.format('YYYY-MM-DD HH:mm:ss'),
+    diasTranscurridos: daysSinceCreation,
+    diasRestantesParaLimpieza: daysLeft > 0 ? daysLeft : 0,
+    proximoReset: daysLeft <= 0 ? '¡Se limpiará en la próxima visita!' : `En ${daysLeft} días`
+  });
+});
+
+// Limpieza automática cada 30 días (se ejecuta al iniciar y cada visita)
+function limpiarArchivoSiEsNecesario() {
+  if (fs.existsSync(DATA_FILE)) {
+    const stats = fs.statSync(DATA_FILE);
+    const creationDate = moment(stats.birthtime).tz('America/Lima');
+    const daysDiff = moment().tz('America/Lima').diff(creationDate, 'days');
+
+    if (daysDiff >= 30) {
+      console.log(`[AUTO-CLEAN] Archivo ips.txt tiene ${daysDiff} días → Se elimina`);
+      fs.unlink(DATA_FILE, (err) => {
+        if (err) console.error('Error al eliminar archivo:', err);
+        else console.log('[AUTO-CLEAN] Archivo eliminado correctamente');
+      });
     }
   }
 }
 
-app.get('/save-ip', (req, res) => {
-  limpiarLogsAntiguos();
-  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress;
-  const fecha = getPeruTime();
-  const userAgent = req.headers['user-agent'] || 'Desconocido';
-  
-  const registro = `[${fecha}] | IP: ${ip} | SISTEMA: ${userAgent}\n`;
+// Ejecutamos la limpieza al iniciar el servidor
+limpiarArchivoSiEsNecesario();
 
-  fs.appendFile(LOG_FILE, registro, (err) => {
-    if (err) return res.status(500).json({ error: "Error al escribir" });
-    res.json({ status: "ok", ip });
-  });
-});
-
-app.get('/admin/download-ips', (req, res) => {
-  if (req.query.pass !== ADMIN_PASSWORD) return res.status(401).send('No autorizado');
-  if (!fs.existsSync(LOG_FILE)) return res.status(404).send('No hay registros.');
-  res.download(LOG_FILE);
-});
-
+// Página principal (información)
 app.get('/', (req, res) => {
-  res.send('Servidor Activo');
+  res.send(`
+    <h2>Servidor activo - Hora Perú: ${moment().tz('America/Lima').format('DD/MM/YYYY HH:mm:ss')}</h2>
+    <p>Todas las visitas se registran automáticamente.</p>
+    <p>Descargar registros (requiere contraseña): <br>
+    <code>/admin/download?pass=TU_CONTRASEÑA</code></p>
+  `);
 });
 
-// IMPORTANTE: Escuchar en 0.0.0.0 para que Render pueda conectar
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Servidor corriendo en puerto ${PORT}`);
+// Iniciamos el servidor
+app.listen(PORT, () => {
+  console.log(`Servidor escuchando en puerto ${PORT} | Hora Perú: ${moment().tz('America/Lima').format('DD/MM/YYYY HH:mm:ss')}`);
 });
