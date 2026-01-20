@@ -49,7 +49,7 @@ app.get('/save-info', (req, res) => {
 });
 
 // Endpoint protegido para descargar el archivo
-app.get('/admin/download', (req, res) => {
+app.get('/admin/download-ips', (req, res) => {
   const pass = req.query.pass;
 
   if (pass !== ADMIN_PASSWORD) {
@@ -123,4 +123,3 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en puerto ${PORT} | Hora Perú: ${moment().tz('America/Lima').format('DD/MM/YYYY HH:mm:ss')}`);
 });
-
