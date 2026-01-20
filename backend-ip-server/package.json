@@ -1,12 +1,25 @@
 {
-  "name": "tracker-ip-peru",
+  "name": "backend-ip-server",
   "version": "1.0.0",
-  "description": "Registro de IPs con hora peruana",
+  "description": "Servidor para registrar información de visitantes (IP, User-Agent, etc.) con hora de Perú y limpieza automática cada 30 días",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "dev": "nodemon index.js"
   },
+  "keywords": [
+    "express",
+    "ip-logger",
+    "node",
+    "peru"
+  ],
+  "author": "Bryan",
+  "license": "ISC",
   "dependencies": {
-    "express": "^4.18.2"
+    "express": "^4.19.2",
+    "moment-timezone": "^0.5.46"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
   }
 }
