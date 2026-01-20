@@ -7,7 +7,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ¡CAMBIAR ESTA CONTRASEÑA POR UNA MUY SEGURA!
-const ADMIN_PASSWORD = 'cambia_esta_contrasena_por_una_muy_segura_2025';
+const ADMIN_PASSWORD = '123';
 
 // Ruta del archivo donde se guardan los datos
 const DATA_FILE = path.join(__dirname, 'ips.txt');
@@ -123,3 +123,4 @@ app.get('/', (req, res) => {
 app.listen(PORT, () => {
   console.log(`Servidor escuchando en puerto ${PORT} | Hora Perú: ${moment().tz('America/Lima').format('DD/MM/YYYY HH:mm:ss')}`);
 });
+
